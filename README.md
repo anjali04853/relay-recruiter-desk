@@ -1,133 +1,152 @@
-# Relay — API C2C Recruiter Workspace
+# Relay | API C2C Recruiter Workspace
 
-A Java 17 / Spring Boot application for the internship workflow: ingest authorized posts → filter US opportunities published within 24 hours → extract recruiter emails → create personalized drafts → review and approve → dry-run or send via SMTP.
+**A Java application for discovering opportunities, organizing recruiter contacts, and preparing reviewed email outreach.**
 
-## Run
+Built for the API C2C internship assignment, Relay brings post filtering, contact extraction, email templates, and outreach tracking into one local workspace. The included demo runs without external credentials.
 
-Requires JDK 17+ and Maven 3.6.3+.
+**Java 17 · Spring Boot 3.4.2 · H2 Database · Maven · HTML, CSS & JavaScript**
 
-```powershell
-mvn test
-mvn package
-java -jar target/recruiter-desk-1.0.0.jar
-```
+[Quick start](#quick-start) · [Demo walkthrough](#demo-walkthrough) · [Assignment coverage](#assignment-coverage) · [Integration setup](docs/CONFIGURATION.md) · [API reference](docs/API.md)
 
-Open [http://localhost:8080](http://localhost:8080). Alternatively run `./start.ps1`; it builds the JAR if absent. After source changes, rebuild with `mvn package`.
+![Relay dashboard showing sample opportunities, recruiter contacts, outreach drafts, and workspace activity](docs/images/dashboard.jpg)
 
-On Windows environments with a long sandbox temporary path, use `./start.ps1`; it supplies short project-local Java and Unix-domain socket temporary paths. The test configuration does the same. If launching the JAR directly in such an environment, add `"-Djdk.net.unixdomain.tmpdir=$PWD\target"` before `-jar`.
+*Dashboard with fictional demo contacts. Live email delivery is disabled by default.*
 
-The app binds to **127.0.0.1** and stores data in `./data/`. No account or external credentials are required for the local demonstration. Do not expose this single-user application to a network without adding authentication, authorization, HTTPS, and operational controls. LinkedIn connection is an integration identity, not application access control.
-
-## Demonstrate the complete workflow
-
-1. Click **Load demo**. Four matching sample posts and four contacts are added; one old post and one non-US post are rejected. Demo data is clearly labeled and uses reserved `.example` email addresses.
-2. Open **Discover posts**, search the imported data, and inspect keyword matches.
-3. Open **Recruiters** to inspect unique extracted email addresses or download CSV.
-4. Open **Email template**, replace the starter with the team's actual supplied format, and add your own profile information. The original assignment did not include the team template.
-5. Click **Create drafts**. Each contact gets at most one draft. Existing drafts are preserved.
-6. Open **Outreach**, edit a message, then approve it. Editing resets approval.
-7. Click **Test dry run**. An activity entry is recorded, no email is sent, and the message remains approved. Suppressing a contact blocks pending outreach.
-
-The app does not invent recruiter emails: it extracts addresses explicitly present in the supplied post text. Names and companies come from imported post metadata and may need human verification. A contact's first observed post is retained as provenance. Posts remain in the historical database after the 24-hour window; the window is enforced when ingesting, not a rolling deletion rule. Country must be explicitly `US`; ambiguous or missing country metadata is rejected.
-
-## LinkedIn sign-in
-
-LinkedIn uses OAuth 2.0. Standard sign-in access provides identity and **does not grant unrestricted keyword search of public LinkedIn posts**. This application does not automate password entry, bypass CAPTCHA, or scrape logged-in pages.
-
-Create your LinkedIn developer app, enable **Sign In with LinkedIn using OpenID Connect**, and register exactly this redirect URL:
+## Overview
 
 ```text
-http://localhost:8080/auth/linkedin/callback
+Authorized post data
+        ↓
+US + last 24 hours + keyword matching
+        ↓
+Recruiter email extraction and deduplication
+        ↓
+Personalized drafts from a team template
+        ↓
+Individual review and approval
+        ↓
+Dry run or configured SMTP delivery
 ```
 
-Set environment variables before launching the server:
+### Key features
+
+- **Focused discovery:** filter imported posts by country, publication time, and the assignment's seven keywords.
+- **Recruiter directory:** extract email addresses from post text, deduplicate contacts, and export CSV.
+- **Personalized outreach:** save a reusable template, generate drafts, and edit each message before approval.
+- **Controlled delivery:** dry-run mode, individual approval, contact suppression, and duplicate-send prevention.
+- **Integration support:** LinkedIn OAuth sign-in, an authorized post-provider adapter, and SMTP delivery.
+- **Persistent workspace:** retain posts, contacts, templates, drafts, and activity in a local H2 database.
+
+## Assignment coverage
+
+| Requirement | Implementation | Setup needed |
+| --- | --- | --- |
+| LinkedIn login | OAuth 2.0 sign-in with OpenID Connect and validated callback state | LinkedIn developer app and initial user consent |
+| Relevant post discovery | Authorized provider sync, JSON import, and search within imported posts | Provider endpoint for external discovery; imports work locally |
+| Required keywords | Java Developer, C2C, Bench, Sales, W2, Full-Time, Hotlist | Included |
+| Last 24 hours | Publication timestamp checked at ingestion | Current UTC timestamps in source data |
+| US-based opportunities | Explicit `country: "US"` filter | Country metadata from the source |
+| Recruiter details | Names and companies from post metadata; emails extracted from post text | Email addresses must be present in source posts |
+| Team email format | Editable templates with contact placeholders | Replace the starter with the team's supplied format |
+| Email delivery | Approved messages submitted through SMTP; dry-run mode included | SMTP credentials and explicit live-send configuration |
+
+**Integration scope:** LinkedIn sign-in provides identity; it does not grant unrestricted public-post search. External discovery requires an authorized source that implements the documented provider contract. The demo exercises filtering, extraction, drafting, approval, and dry runs without those credentials. See the [integration guide](docs/CONFIGURATION.md).
+
+## Quick start
+
+### Prerequisites
+
+- JDK **17 or newer**
+- Maven **3.6.3 or newer**
+- Git and a web browser
+
+### Clone and run
+
+```bash
+git clone https://github.com/anjali04853/relay-recruiter-desk.git
+cd relay-recruiter-desk
+mvn clean verify
+```
+
+On Windows, start from PowerShell:
 
 ```powershell
-$env:LINKEDIN_CLIENT_ID = 'your-client-id'
-$env:LINKEDIN_CLIENT_SECRET = 'your-client-secret'
-$env:LINKEDIN_REDIRECT_URI = 'http://localhost:8080/auth/linkedin/callback'
+.\start.ps1
+```
+
+On macOS or Linux:
+
+```bash
 java -jar target/recruiter-desk-1.0.0.jar
 ```
 
-Use **Connections → Connect LinkedIn**. The application checks a one-time, ten-minute OAuth state value, exchanges the authorization code server-side, fetches `/v2/userinfo`, rotates the session ID, and retains only name/email in the session. Tokens and client secrets are not returned to the browser. Reuse of the browser's authorized LinkedIn session can streamline subsequent sign-ins, but initial user consent is required. Disconnect clears the local session; it does not revoke LinkedIn app consent.
+Open **[http://localhost:8080](http://localhost:8080)**.
 
-Official documentation: [LinkedIn API access](https://learn.microsoft.com/en-us/linkedin/shared/authentication/getting-access), [OpenID Connect sign-in](https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin-v2).
+The Windows launcher supplies project-local temporary paths for Java networking and builds the JAR if missing. Rebuild with `mvn clean verify` after source changes. Stop the application with **Ctrl+C** in its terminal.
 
-## Post import API
+## Demo walkthrough
 
-Import a JSON array using **Discover posts → Import JSON / Upload file** or the API:
+1. **Load sample data:** click **Load demo** on the overview page. Four matching US posts and four contacts are added. One old post and one non-US post are filtered out.
+2. **Explore opportunities:** open **Discover posts** to search post text, recruiter names, companies, and keywords.
+3. **Review contacts:** open **Recruiters** to inspect extracted email addresses or download a CSV.
+4. **Set the template:** open **Email template** and add the team's format and your profile details.
+5. **Generate drafts:** click **Create drafts**. Each eligible contact receives at most one draft; existing drafts are preserved.
+6. **Review and approve:** open **Outreach**, edit a message, and approve it. Editing an approved message resets it to draft.
+7. **Test delivery:** click **Test dry run**. The action is recorded in activity; no email is sent and the draft remains approved.
 
-```json
-[
-  {
-    "author": "Recruiter Name",
-    "company": "Staffing Company",
-    "text": "Java Developer C2C, US remote. Send profiles to recruiter@company.com",
-    "location": "Austin, TX",
-    "country": "US",
-    "publishedAt": "2026-10-26T14:00:00Z",
-    "url": "https://www.linkedin.com/posts/example"
-  }
-]
+Demo contacts are labeled and use reserved `.example` addresses. They are blocked from live delivery even when SMTP is enabled.
+
+## Architecture
+
+| Layer | Technology / responsibility |
+| --- | --- |
+| Web interface | Responsive HTML, CSS, and vanilla JavaScript served by Spring Boot |
+| HTTP API | Spring Web MVC, OAuth callbacks, provider sync, and mail orchestration |
+| Workflow service | Validation, filtering, extraction, deduplication, templates, and draft transitions |
+| Persistence | Spring JDBC with an H2 file database and transactional imports |
+| External integrations | LinkedIn OAuth, HTTPS post-provider endpoint, and SMTP via Spring Mail |
+| Verification | JUnit 5, Spring Boot Test, MockMvc, and Mockito |
+
+```text
+src/main/java/com/c2c/desk/
+├── Application.java        # Spring Boot entry point
+├── Api.java                # API endpoints and integrations
+├── Workflow.java           # Workflow and persistence
+└── WebConfig.java          # Request checks and response headers
+src/main/resources/
+├── application.properties  # Environment-based configuration
+├── schema.sql              # Database schema
+└── static/                 # Dashboard interface
+src/test/java/com/c2c/desk/
+└── WorkflowTest.java        # Workflow and HTTP integration tests
+docs/                       # Setup, API reference, and preview
 ```
 
-**Replace the example timestamp with a current ISO-8601 UTC timestamp** before importing. Future posts are rejected. At most 500 posts per batch, 30,000 characters per post, HTTPS URLs only. Malformed entries roll back the entire batch. Nonmatching, old, future and non-US posts are counted as filtered. Duplicate post URLs are ignored; without a URL, the author, text and timestamp identify the post. Addresses are deduplicated case-insensitively across contacts.
+## Validation
 
-Keyword matching is case-insensitive and uses word boundaries, with OR semantics: Java Developer, C2C, Bench, Sales, W2, Full-Time (also Full Time), Hotlist.
-
-### Authorized provider adapter
-
-Set `POST_PROVIDER_URL` to your own **HTTPS** endpoint backed by data you are authorized to access. This is a generic integration contract, not a claim that LinkedIn supplies this endpoint. Set `POST_PROVIDER_TOKEN` if your endpoint needs a bearer token.
-
-**Sync posts** sends an HTTP GET with `country=US`, `since=<UTC instant 24h ago>`, and `keywords=<comma-separated list>`. Your adapter must return HTTP 200 with the JSON array above (up to 500 entries / 4 MB). Adapt your approved LinkedIn or licensed provider response to this contract. The app revalidates all returned posts locally. Sync is initiated manually; no background collection is enabled.
-
-## SMTP and live delivery
-
-Dry-run mode is the default. No messages have been sent during development. To enable live email after setting the real team template and reviewing recipients:
-
-```powershell
-$env:SMTP_HOST = 'smtp.your-provider.com'
-$env:SMTP_PORT = '587'
-$env:SMTP_USERNAME = 'your-username'
-$env:SMTP_PASSWORD = 'your-app-password'
-$env:MAIL_FROM = 'you@your-domain.com'
-$env:LIVE_SEND = 'true'
-java -jar target/recruiter-desk-1.0.0.jar
+```bash
+mvn test
 ```
 
-STARTTLS and SMTP authentication default to required/enabled. Provider configuration must support STARTTLS. A single message must be explicitly approved and sent from the UI/API. A maximum of 25 deliveries or uncertain delivery attempts is allowed in a rolling 24-hour period. Demo contacts cannot receive live email. Sent, in-flight and uncertain messages cannot be re-approved or resent.
+The verified build passed **7 tests with 0 failures and 0 errors**, covering:
 
-SMTP failures are conservatively marked **UNKNOWN** because an interrupted connection can occur after the server accepted the message. Check SMTP provider logs before reconciling delivery. The app does not automatically retry uncertain sends. If the process stops during sending, that draft remains **SENDING**, also requiring provider-log reconciliation. Exactly-once delivery cannot be guaranteed by SMTP.
+- Country, age, future-timestamp, and keyword filtering.
+- Post/contact deduplication and transactional rollback of malformed batches.
+- Template rendering, approval reset after edits, and contact suppression.
+- Demo ingestion, serialization, request-header enforcement, CSV export, and invalid OAuth callback rejection.
+- Dry runs, successful mocked SMTP delivery, repeat-send blocking, and uncertain SMTP outcomes.
 
-## API reference
+A browser walkthrough also verified demo imports, the recruiter table, draft generation, approval, and dry-run delivery. LinkedIn and real SMTP delivery require credentials and have not been verified against live accounts.
 
-All mutating API calls require `X-Desk-Request: 1`; JSON bodies use `Content-Type: application/json`. There is no cross-origin API access. Keep this app bound to localhost.
+## Configuration and operating notes
 
-| Method | Route | Purpose |
-|---|---|---|
-| GET | `/api/status` | Configuration flags and current LinkedIn profile |
-| GET | `/api/stats` | Counts and recent activity |
-| GET | `/api/posts` | Imported post history |
-| POST | `/api/import` | Import JSON array |
-| POST | `/api/demo` | Load sample data |
-| POST | `/api/sync` | Fetch configured provider |
-| GET | `/api/contacts` | Extracted contacts |
-| POST | `/api/contacts/{id}/suppress` | Block pending outreach |
-| GET | `/api/export` | Recruiter CSV with spreadsheet formula protection |
-| GET / PUT | `/api/template` | Read/save `{subject, body}` |
-| POST | `/api/drafts/generate` | Create missing drafts |
-| GET | `/api/drafts` | Message queue |
-| PUT | `/api/drafts/{id}` | Edit `{subject, body}` and reset approval |
-| POST | `/api/drafts/{id}/approve` | Approve reviewed content |
-| POST | `/api/drafts/{id}/send` | Dry-run or live delivery |
-| GET | `/auth/linkedin` | Start OAuth sign-in |
-| GET | `/auth/linkedin/callback` | Validate state and complete sign-in |
-| POST | `/api/logout` | Disconnect local LinkedIn session |
+Use [`.env.example`](.env.example) as the configuration reference. Set values in the environment of the terminal launching the app; Spring Boot does **not** automatically load `.env` files.
 
-Database field names in list responses are uppercase. Templates support `{{name}}`, `{{email}}`, `{{company}}`, `{{keywords}}`, and `{{source_url}}`. Environment variables are documented in `.env.example`; `.env` files are **not** automatically loaded by Spring Boot. Never commit credentials or local recruiter data.
+- The app binds to **127.0.0.1** and is intended for a single-user local demonstration. LinkedIn sign-in is an integration connection, not application access control.
+- Local data is stored under `data/`. Data files, build outputs, logs, and `.env` are excluded from Git.
+- The 24-hour rule applies at ingestion. Imported posts remain available as history.
+- Country metadata must explicitly identify the US. Names and companies reflect source metadata and should be reviewed before outreach.
+- Live delivery requires approval and configuration. A rolling limit counts up to 25 sent, in-flight, or uncertain attempts per 24 hours. `SENT` indicates successful SMTP submission, not confirmed inbox receipt.
+- Uncertain or interrupted sends require checking provider logs before reconciliation; they are not retried automatically.
 
-## Verification
-
-`mvn test` covers age/country/keyword filters, future timestamps, deduplication, transactional rollback, template rendering, approval reset, suppression, JSON serialization, required request headers, demo ingestion, draft generation, dry-run delivery, export, rejection of invalid OAuth callbacks, successful mock SMTP delivery, duplicate-send prevention, demo-send blocking, and uncertain SMTP outcome handling. Real LinkedIn and SMTP integration tests require your credentials and are not part of the automated suite.
-
-The hiring message's “tomorrow at 7 PM” corresponds to **27 October 2026 at 7 PM IST** when interpreted relative to the supplied current date, 26 October 2026. No scheduler or automatic submission is configured.
+See the [configuration guide](docs/CONFIGURATION.md) and [API reference](docs/API.md) for complete setup and request details.
